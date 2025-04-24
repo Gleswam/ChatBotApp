@@ -15,10 +15,10 @@ struct ContentView: View {
     @State private var isLoading: Bool = false
     @State private var errorMessage: String?
     
-    private let deepSeekService: ChatGPTService
+    private let deepSeekService: DeepSeekService
     
     init() {
-        self.deepSeekService = ChatGPTService(apiKey: Config.apiKey)
+        self.deepSeekService = DeepSeekService(apiKey: Config.apiKey)
     }
     
     var body: some View {
@@ -85,7 +85,7 @@ struct ContentView: View {
                     modelContext.insert(botMessage)
                     isLoading = false
                 }
-            } catch let error as ChatGPTError {
+            } catch let error as DeepSeekError {
                 await MainActor.run {
                     switch error {
                     case .invalidURL:
