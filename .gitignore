@@ -41,11 +41,4 @@ fastlane/test_output
 injected_container.swift
 
 # Config files with sensitive information
-test/test/Config.swift
-**/Config.swift
-**/config.swift
-**/APIKeys.swift
-**/Secrets.swift
-**/Credentials.swift
-**/Keys.swift
-**/*.xcconfig
+
