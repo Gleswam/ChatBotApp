@@ -11,6 +11,43 @@ import UniformTypeIdentifiers
 import PhotosUI
 import UIKit
 
+struct NeonGradient: ViewModifier {
+    let color: Color
+    
+    func body(content: Content) -> some View {
+        content
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(
+                        LinearGradient(
+                            colors: [color.opacity(0.7), color.opacity(0.3), color.opacity(0.7)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 2
+                    )
+            )
+            .shadow(color: color.opacity(0.5), radius: 10, x: 0, y: 0)
+    }
+}
+
+struct PulsingAnimation: ViewModifier {
+    @State private var isPulsing = false
+    
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(isPulsing ? 1.05 : 1.0)
+            .animation(
+                Animation.easeInOut(duration: 1.0)
+                    .repeatForever(autoreverses: true),
+                value: isPulsing
+            )
+            .onAppear {
+                isPulsing = true
+            }
+    }
+}
+
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Message.timestamp) private var messages: [Message]
@@ -24,6 +61,8 @@ struct ContentView: View {
     @State private var selectedImage: UIImage?
     @State private var selectedItem: PhotosPickerItem?
     @State private var showImageSourceAlert: Bool = false
+    @State private var isRecording: Bool = false
+    @State private var showSettings: Bool = false
     
     private let deepSeekService: DeepSeekService
     
@@ -32,80 +71,163 @@ struct ContentView: View {
     }
     
     var body: some View {
-        VStack {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
-                    ForEach(messages) { message in
-                        MessageBubble(message: message)
+        ZStack {
+            // Background gradient
+            LinearGradient(
+                colors: [Color.black, Color(red: 0.1, green: 0.1, blue: 0.2)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+            
+            VStack {
+                // Header
+                HStack {
+                    Text("AI Chat")
+                        .font(.title)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                    
+                    Spacer()
+                    
+                    Button(action: { showSettings = true }) {
+                        Image(systemName: "gear")
+                            .font(.title2)
+                            .foregroundColor(.white)
                     }
                 }
                 .padding()
-            }
-            
-            if let error = errorMessage {
-                Text(error)
-                    .foregroundColor(.red)
-                    .padding(.horizontal)
-                    .transition(.opacity)
-            }
-            
-            if !selectedFiles.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack {
-                        ForEach(selectedFiles) { file in
-                            FileAttachmentView(file: file) {
-                                if let index = selectedFiles.firstIndex(where: { $0.id == file.id }) {
-                                    selectedFiles.remove(at: index)
+                .background(Color.black.opacity(0.3))
+                
+                // Messages
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 12) {
+                        ForEach(messages) { message in
+                            MessageBubble(message: message)
+                        }
+                    }
+                    .padding()
+                }
+                
+                if let error = errorMessage {
+                    Text(error)
+                        .foregroundColor(.red)
+                        .padding(.horizontal)
+                        .transition(.opacity)
+                }
+                
+                // Attachments preview
+                if !selectedFiles.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack {
+                            ForEach(selectedFiles) { file in
+                                FileAttachmentView(file: file) {
+                                    if let index = selectedFiles.firstIndex(where: { $0.id == file.id }) {
+                                        selectedFiles.remove(at: index)
+                                    }
                                 }
                             }
                         }
+                        .padding(.horizontal)
                     }
-                    .padding(.horizontal)
+                    .frame(height: 60)
                 }
-                .frame(height: 60)
-            }
-            
-            HStack {
-                Menu {
-                    Button(action: { isFilePickerPresented = true }) {
-                        Label("File", systemImage: "doc")
-                    }
-                    
-                    Button(action: { showImageSourceAlert = true }) {
-                        Label("Image", systemImage: "photo")
-                    }
-                } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .foregroundColor(.blue)
-                        .font(.title2)
-                }
-                .disabled(isLoading)
                 
-                TextField("Type a message...", text: $newMessage)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .disabled(isLoading)
-                    .onSubmit {
-                        if !newMessage.isEmpty && !isLoading {
-                            sendMessage()
+                // Input area
+                VStack(spacing: 0) {
+                    // Action buttons
+                    HStack {
+                        Button(action: { showImageSourceAlert = true }) {
+                            Image(systemName: "photo")
+                                .font(.title2)
+                                .foregroundColor(.white)
+                                .frame(width: 40, height: 40)
+                                .background(
+                                    LinearGradient(
+                                        colors: [.purple, .blue],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .clipShape(Circle())
+                        }
+                        
+                        Button(action: { isRecording.toggle() }) {
+                            Image(systemName: isRecording ? "stop.circle.fill" : "mic.circle.fill")
+                                .font(.title2)
+                                .foregroundColor(.white)
+                                .frame(width: 40, height: 40)
+                                .background(
+                                    LinearGradient(
+                                        colors: [.red, .orange],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .clipShape(Circle())
+                        }
+                        .modifier(PulsingAnimation())
+                        
+                        Spacer()
+                        
+                        Button(action: {}) {
+                            Image(systemName: "face.smiling")
+                                .font(.title2)
+                                .foregroundColor(.white)
+                                .frame(width: 40, height: 40)
+                                .background(
+                                    LinearGradient(
+                                        colors: [.green, .blue],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .clipShape(Circle())
                         }
                     }
-                
-                Button(action: sendMessage) {
-                    if isLoading {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle())
-                    } else {
-                        Image(systemName: "paperplane.fill")
-                            .foregroundColor(.blue)
+                    .padding(.horizontal)
+                    
+                    // Message input
+                    HStack {
+                        TextField("Type a message...", text: $newMessage)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                            .padding(10)
+                            .background(Color.white.opacity(0.1))
+                            .cornerRadius(20)
+                            .foregroundColor(.white)
+                            .disabled(isLoading)
+                            .onSubmit {
+                                if !newMessage.isEmpty && !isLoading {
+                                    sendMessage()
+                                }
+                            }
+                        
+                        Button(action: sendMessage) {
+                            if isLoading {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            } else {
+                                Image(systemName: "paperplane.fill")
+                                    .font(.title2)
+                                    .foregroundColor(.white)
+                                    .frame(width: 40, height: 40)
+                                    .background(
+                                        LinearGradient(
+                                            colors: [.blue, .purple],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                                    .clipShape(Circle())
+                            }
+                        }
+                        .disabled(newMessage.isEmpty || isLoading)
                     }
+                    .padding()
                 }
-                .disabled(newMessage.isEmpty || isLoading)
+                .background(Color.black.opacity(0.3))
             }
-            .padding()
         }
-        .animation(.easeInOut, value: isLoading)
-        .animation(.easeInOut, value: errorMessage)
-        .animation(.easeInOut, value: selectedFiles)
         .fileImporter(
             isPresented: $isFilePickerPresented,
             allowedContentTypes: [.item],
@@ -149,6 +271,10 @@ struct ContentView: View {
                 isImagePickerPresented = true
             }
             Button("Cancel", role: .cancel) {}
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView(onClearHistory: clearHistory)
+                .presentationDetents([.height(200)])
         }
     }
     
@@ -215,6 +341,13 @@ struct ContentView: View {
             }
         }
     }
+    
+    private func clearHistory() {
+        for message in messages {
+            modelContext.delete(message)
+        }
+        showSettings = false
+    }
 }
 
 struct ImagePicker: UIViewControllerRepresentable {
@@ -271,10 +404,11 @@ struct FileAttachmentView: View {
                 }
             } else {
                 Image(systemName: "doc.fill")
-                    .foregroundColor(.blue)
+                    .foregroundColor(.white)
             }
             
             Text(file.fileName)
+                .foregroundColor(.white)
                 .lineLimit(1)
             
             Button(action: onRemove) {
@@ -283,7 +417,7 @@ struct FileAttachmentView: View {
             }
         }
         .padding(8)
-        .background(Color.gray.opacity(0.1))
+        .background(Color.white.opacity(0.1))
         .cornerRadius(8)
     }
 }
@@ -302,6 +436,7 @@ struct MessageBubble: View {
                                 .scaledToFit()
                                 .frame(maxWidth: 200)
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .modifier(NeonGradient(color: message.isUser ? .blue : .purple))
                         }
                     } else {
                         FileAttachmentView(file: file) {}
@@ -316,14 +451,65 @@ struct MessageBubble: View {
                 
                 Text(message.content)
                     .padding()
-                    .background(message.isUser ? Color.blue : Color.gray.opacity(0.2))
-                    .foregroundColor(message.isUser ? .white : .primary)
+                    .background(
+                        message.isUser ?
+                        LinearGradient(
+                            colors: [.blue.opacity(0.3), .purple.opacity(0.3)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ) :
+                        LinearGradient(
+                            colors: [.gray.opacity(0.2), .gray.opacity(0.1)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .foregroundColor(.white)
                     .cornerRadius(20)
+                    .modifier(NeonGradient(color: message.isUser ? .blue : .purple))
                 
                 if !message.isUser {
                     Spacer()
                 }
             }
+        }
+    }
+}
+
+struct SettingsView: View {
+    let onClearHistory: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var showConfirmation = false
+    
+    var body: some View {
+        NavigationView {
+            List {
+                Button(action: { showConfirmation = true }) {
+                    HStack {
+                        Image(systemName: "trash")
+                            .foregroundColor(.red)
+                        Text("Clear Chat History")
+                            .foregroundColor(.red)
+                    }
+                }
+            }
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .alert("Clear History", isPresented: $showConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Clear", role: .destructive) {
+                onClearHistory()
+            }
+        } message: {
+            Text("Are you sure you want to clear all chat history? This action cannot be undone.")
         }
     }
 }

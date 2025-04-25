@@ -41,4 +41,3 @@ fastlane/test_output
 injected_container.swift
 
 # Config files with sensitive information
-Config.swift 
