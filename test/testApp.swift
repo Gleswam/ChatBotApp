@@ -10,15 +10,15 @@ import SwiftData
 
 @main
 struct testApp: App {
-    let container: ModelContainer
+    let modelContainer: ModelContainer
     
     init() {
         do {
-            let schema = Schema([Message.self])
+            let schema = Schema([Message.self, FileAttachment.self])
             let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-            container = try ModelContainer(for: schema, configurations: [modelConfiguration])
+            modelContainer = try ModelContainer(for: schema, configurations: [modelConfiguration])
         } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+            fatalError("Could not initialize ModelContainer: \(error)")
         }
     }
     
@@ -26,6 +26,6 @@ struct testApp: App {
         WindowGroup {
             ContentView()
         }
-        .modelContainer(container)
+        .modelContainer(modelContainer)
     }
 }

@@ -1,6 +1,6 @@
 import Foundation
 
-class ChatGPTService {
+class DeepSeekService {
     private let apiKey: String
     private let baseURL = "https://api.deepseek.com/v1/chat/completions"
     private let session: URLSession
@@ -14,16 +14,16 @@ class ChatGPTService {
         print("DeepSeekService initialized with API key: \(String(apiKey.prefix(8)))...")
     }
     
-    func sendMessage(_ message: String) async throws -> String {
+    func sendMessage(_ message: String, attachments: [FileAttachment]? = nil) async throws -> String {
         guard !message.isEmpty else {
-            throw ChatGPTError.invalidRequest
+            throw DeepSeekError.invalidRequest
         }
         
         print("Sending message: \(message)")
         
         guard let url = URL(string: baseURL) else {
             print("Error: Invalid URL")
-            throw ChatGPTError.invalidURL
+            throw DeepSeekError.invalidURL
         }
         
         var request = URLRequest(url: url)
@@ -31,7 +31,7 @@ class ChatGPTService {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        let requestBody: [String: Any] = [
+        var requestBody: [String: Any] = [
             "model": "deepseek-chat",
             "messages": [
                 ["role": "user", "content": message]
@@ -39,12 +39,26 @@ class ChatGPTService {
             "temperature": 0.7
         ]
         
+        // Add file attachments if present
+        if let attachments = attachments {
+            var fileContents: [[String: Any]] = []
+            for attachment in attachments {
+                let base64Data = attachment.fileData.base64EncodedString()
+                fileContents.append([
+                    "name": attachment.fileName,
+                    "type": attachment.mimeType,
+                    "content": base64Data
+                ])
+            }
+            requestBody["files"] = fileContents
+        }
+        
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
             print("Request body created successfully")
         } catch {
             print("Error creating request body: \(error)")
-            throw ChatGPTError.invalidRequest
+            throw DeepSeekError.invalidRequest
         }
         
         do {
@@ -53,34 +67,34 @@ class ChatGPTService {
             
             guard let httpResponse = response as? HTTPURLResponse else {
                 print("Error: Invalid HTTP response")
-                throw ChatGPTError.invalidResponse
+                throw DeepSeekError.invalidResponse
             }
             
             print("Received response with status code: \(httpResponse.statusCode)")
             
             guard (200...299).contains(httpResponse.statusCode) else {
-                if let errorResponse = try? JSONDecoder().decode(ChatGPTErrorResponse.self, from: data) {
+                if let errorResponse = try? JSONDecoder().decode(DeepSeekErrorResponse.self, from: data) {
                     print("API Error: \(errorResponse.error.message)")
-                    throw ChatGPTError.apiError(errorResponse.error.message)
+                    throw DeepSeekError.apiError(errorResponse.error.message)
                 }
                 print("Server Error: \(httpResponse.statusCode)")
-                throw ChatGPTError.serverError(httpResponse.statusCode)
+                throw DeepSeekError.serverError(httpResponse.statusCode)
             }
             
-            let chatResponse = try JSONDecoder().decode(ChatGPTResponse.self, from: data)
+            let chatResponse = try JSONDecoder().decode(DeepSeekResponse.self, from: data)
             print("Successfully decoded response")
             return chatResponse.choices.first?.message.content ?? "No response"
-        } catch let error as ChatGPTError {
+        } catch let error as DeepSeekError {
             print("DeepSeek Error: \(error)")
             throw error
         } catch {
             print("Network Error: \(error)")
-            throw ChatGPTError.networkError(error)
+            throw DeepSeekError.networkError(error)
         }
     }
 }
 
-enum ChatGPTError: Error, LocalizedError {
+enum DeepSeekError: Error, LocalizedError {
     case invalidURL
     case invalidRequest
     case invalidResponse
@@ -106,7 +120,7 @@ enum ChatGPTError: Error, LocalizedError {
     }
 }
 
-struct ChatGPTResponse: Codable {
+struct DeepSeekResponse: Codable {
     let choices: [Choice]
     
     struct Choice: Codable {
@@ -118,7 +132,7 @@ struct ChatGPTResponse: Codable {
     }
 }
 
-struct ChatGPTErrorResponse: Codable {
+struct DeepSeekErrorResponse: Codable {
     let error: Error
     
     struct Error: Codable {
