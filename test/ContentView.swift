@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import SwiftData
 import UniformTypeIdentifiers
 import PhotosUI
 import UIKit
@@ -49,25 +48,22 @@ struct PulsingAnimation: ViewModifier {
 }
 
 struct ContentView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Message.timestamp) private var messages: [Message]
+    @State private var messages: [Message] = []
     @State private var newMessage: String = ""
     @State private var isLoading: Bool = false
     @State private var errorMessage: String?
-    @State private var selectedFiles: [FileAttachment] = []
-    @State private var isFilePickerPresented: Bool = false
-    @State private var isImagePickerPresented: Bool = false
-    @State private var isCameraPresented: Bool = false
-    @State private var selectedImage: UIImage?
-    @State private var selectedItem: PhotosPickerItem?
-    @State private var showImageSourceAlert: Bool = false
-    @State private var isRecording: Bool = false
     @State private var showSettings: Bool = false
+    @State private var showError: Bool = false
+    @State private var isProcessing: Bool = false
     
     private let deepSeekService: DeepSeekService
     
     init() {
         self.deepSeekService = DeepSeekService(apiKey: Config.apiKey)
+        // Загрузка истории чата при инициализации
+        if let loaded = ChatHistory.load() {
+            _messages = State(initialValue: loaded)
+        }
     }
     
     var body: some View {
@@ -116,94 +112,25 @@ struct ContentView: View {
                         .transition(.opacity)
                 }
                 
-                // Attachments preview
-                if !selectedFiles.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack {
-                            ForEach(selectedFiles) { file in
-                                FileAttachmentView(file: file) {
-                                    if let index = selectedFiles.firstIndex(where: { $0.id == file.id }) {
-                                        selectedFiles.remove(at: index)
-                                    }
-                                }
-                            }
-                        }
-                        .padding(.horizontal)
-                    }
-                    .frame(height: 60)
-                }
-                
                 // Input area
                 VStack(spacing: 0) {
-                    // Action buttons
-                    HStack {
-                        Button(action: { showImageSourceAlert = true }) {
-                            Image(systemName: "photo")
-                                .font(.title2)
-                                .foregroundColor(.white)
-                                .frame(width: 40, height: 40)
-                                .background(
-                                    LinearGradient(
-                                        colors: [.purple, .blue],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .clipShape(Circle())
-                        }
-                        
-                        Button(action: { isRecording.toggle() }) {
-                            Image(systemName: isRecording ? "stop.circle.fill" : "mic.circle.fill")
-                                .font(.title2)
-                                .foregroundColor(.white)
-                                .frame(width: 40, height: 40)
-                                .background(
-                                    LinearGradient(
-                                        colors: [.red, .orange],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .clipShape(Circle())
-                        }
-                        .modifier(PulsingAnimation())
-                        
-                        Spacer()
-                        
-                        Button(action: {}) {
-                            Image(systemName: "face.smiling")
-                                .font(.title2)
-                                .foregroundColor(.white)
-                                .frame(width: 40, height: 40)
-                                .background(
-                                    LinearGradient(
-                                        colors: [.green, .blue],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .clipShape(Circle())
-                        }
-                    }
-                    .padding(.horizontal)
-                    
                     // Message input
                     HStack {
                         TextField("Type a message...", text: $newMessage)
                             .textFieldStyle(RoundedBorderTextFieldStyle())
                             .padding(10)
-                            .background(Color.white.opacity(0.1))
+                            .background(Color.white)
                             .cornerRadius(20)
-                            .foregroundColor(.white)
-                            .disabled(isLoading)
+                            .foregroundColor(.black)
+                            .disabled(isProcessing)
                             .onSubmit {
-                                if !newMessage.isEmpty && !isLoading {
+                                if !newMessage.isEmpty && !isProcessing {
                                     sendMessage()
                                 }
                             }
                         
                         Button(action: sendMessage) {
-                            if isLoading {
+                            if isProcessing {
                                 ProgressView()
                                     .progressViewStyle(CircularProgressViewStyle(tint: .white))
                             } else {
@@ -221,204 +148,59 @@ struct ContentView: View {
                                     .clipShape(Circle())
                             }
                         }
-                        .disabled(newMessage.isEmpty || isLoading)
+                        .disabled(newMessage.isEmpty || isProcessing)
                     }
                     .padding()
                 }
                 .background(Color.black.opacity(0.3))
             }
         }
-        .fileImporter(
-            isPresented: $isFilePickerPresented,
-            allowedContentTypes: [.item],
-            allowsMultipleSelection: true
-        ) { result in
-            do {
-                let urls = try result.get()
-                for url in urls {
-                    let data = try Data(contentsOf: url)
-                    let fileName = url.lastPathComponent
-                    let mimeType = url.mimeType()
-                    let attachment = FileAttachment(fileName: fileName, fileData: data, mimeType: mimeType)
-                    selectedFiles.append(attachment)
-                }
-            } catch {
-                errorMessage = "Error loading file: \(error.localizedDescription)"
-            }
-        }
-        .photosPicker(isPresented: $isImagePickerPresented, selection: $selectedItem, matching: .images)
-        .onChange(of: selectedItem) { _, newItem in
-            if let item = newItem {
-                Task {
-                    if let data = try? await item.loadTransferable(type: Data.self) {
-                        if let image = UIImage(data: data) {
-                            await MainActor.run {
-                                handleSelectedImage(image)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        .sheet(isPresented: $isCameraPresented) {
-            ImagePicker(image: $selectedImage, sourceType: .camera)
-        }
-        .alert("Choose Image Source", isPresented: $showImageSourceAlert) {
-            Button("Camera") {
-                isCameraPresented = true
-            }
-            Button("Photo Library") {
-                isImagePickerPresented = true
-            }
-            Button("Cancel", role: .cancel) {}
-        }
         .sheet(isPresented: $showSettings) {
             SettingsView(onClearHistory: clearHistory)
                 .presentationDetents([.height(200)])
         }
-    }
-    
-    private func handleSelectedImage(_ image: UIImage) {
-        do {
-            if let imageData = image.jpegData(compressionQuality: 0.8) {
-                let fileName = "image_\(Date().timeIntervalSince1970).jpg"
-                let attachment = FileAttachment(fileName: fileName, fileData: imageData, mimeType: "image/jpeg")
-                selectedFiles.append(attachment)
-            } else {
-                throw NSError(domain: "ImageProcessing", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to process image"])
-            }
-        } catch {
-            errorMessage = "Error processing image: \(error.localizedDescription)"
+        .alert("Error", isPresented: $showError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
         }
-        selectedImage = nil
-        selectedItem = nil
+        .onChange(of: messages) { _ in
+            ChatHistory.save(messages)
+        }
     }
     
     private func sendMessage() {
-        guard !newMessage.isEmpty else { return }
+        let trimmedMessage = newMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedMessage.isEmpty else { return }
         
-        let userMessage = Message(content: newMessage, isUser: true, attachments: selectedFiles)
-        modelContext.insert(userMessage)
-        
-        let messageToSend = newMessage
-        let filesToSend = selectedFiles
+        let userMessage = Message(content: trimmedMessage, isUser: true, timestamp: Date())
+        messages.append(userMessage)
+        Message.saveLastMessage(userMessage)
         newMessage = ""
-        selectedFiles = []
-        isLoading = true
-        errorMessage = nil
         
+        isProcessing = true
         Task {
             do {
-                let response = try await deepSeekService.sendMessage(messageToSend, attachments: filesToSend)
+                let response = try await deepSeekService.sendMessage(trimmedMessage)
                 await MainActor.run {
-                    let botMessage = Message(content: response, isUser: false)
-                    modelContext.insert(botMessage)
-                    isLoading = false
-                }
-            } catch let error as DeepSeekError {
-                await MainActor.run {
-                    switch error {
-                    case .invalidURL:
-                        errorMessage = "Invalid URL configuration"
-                    case .invalidRequest:
-                        errorMessage = "Invalid request format"
-                    case .invalidResponse:
-                        errorMessage = "Invalid response from server"
-                    case .serverError(let code):
-                        errorMessage = "Server error: \(code)"
-                    case .apiError(let message):
-                        errorMessage = "API error: \(message)"
-                    case .networkError:
-                        errorMessage = "Network error. Please check your connection"
-                    }
-                    isLoading = false
+                    let aiMessage = Message(content: response, isUser: false, timestamp: Date())
+                    messages.append(aiMessage)
+                    Message.saveLastMessage(aiMessage)
+                    isProcessing = false
                 }
             } catch {
                 await MainActor.run {
-                    errorMessage = "An unexpected error occurred"
-                    isLoading = false
+                    errorMessage = error.localizedDescription
+                    showError = true
+                    isProcessing = false
                 }
             }
         }
     }
     
     private func clearHistory() {
-        for message in messages {
-            modelContext.delete(message)
-        }
+        messages.removeAll()
         showSettings = false
-    }
-}
-
-struct ImagePicker: UIViewControllerRepresentable {
-    @Binding var image: UIImage?
-    let sourceType: UIImagePickerController.SourceType
-    @Environment(\.presentationMode) private var presentationMode
-    
-    func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
-        picker.sourceType = sourceType
-        picker.delegate = context.coordinator
-        return picker
-    }
-    
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
-    
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-    
-    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
-        let parent: ImagePicker
-        
-        init(_ parent: ImagePicker) {
-            self.parent = parent
-        }
-        
-        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
-            if let image = info[.originalImage] as? UIImage {
-                parent.image = image
-            }
-            parent.presentationMode.wrappedValue.dismiss()
-        }
-        
-        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            parent.presentationMode.wrappedValue.dismiss()
-        }
-    }
-}
-
-struct FileAttachmentView: View {
-    let file: FileAttachment
-    let onRemove: () -> Void
-    
-    var body: some View {
-        HStack {
-            if file.mimeType.starts(with: "image/") {
-                if let uiImage = UIImage(data: file.fileData) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 40, height: 40)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
-            } else {
-                Image(systemName: "doc.fill")
-                    .foregroundColor(.white)
-            }
-            
-            Text(file.fileName)
-                .foregroundColor(.white)
-                .lineLimit(1)
-            
-            Button(action: onRemove) {
-                Image(systemName: "xmark.circle.fill")
-                    .foregroundColor(.gray)
-            }
-        }
-        .padding(8)
-        .background(Color.white.opacity(0.1))
-        .cornerRadius(8)
     }
 }
 
@@ -426,51 +208,32 @@ struct MessageBubble: View {
     let message: Message
     
     var body: some View {
-        VStack(alignment: message.isUser ? .trailing : .leading, spacing: 4) {
-            if let attachments = message.attachments {
-                ForEach(attachments) { file in
-                    if file.mimeType.starts(with: "image/") {
-                        if let uiImage = UIImage(data: file.fileData) {
-                            Image(uiImage: uiImage)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(maxWidth: 200)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                                .modifier(NeonGradient(color: message.isUser ? .blue : .purple))
-                        }
-                    } else {
-                        FileAttachmentView(file: file) {}
-                    }
-                }
+        HStack {
+            if message.isUser {
+                Spacer()
             }
             
-            HStack {
-                if message.isUser {
-                    Spacer()
-                }
-                
-                Text(message.content)
-                    .padding()
-                    .background(
-                        message.isUser ?
-                        LinearGradient(
-                            colors: [.blue.opacity(0.3), .purple.opacity(0.3)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ) :
-                        LinearGradient(
-                            colors: [.gray.opacity(0.2), .gray.opacity(0.1)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
+            Text(message.content)
+                .padding()
+                .background(
+                    message.isUser ?
+                    LinearGradient(
+                        colors: [.blue.opacity(0.3), .purple.opacity(0.3)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ) :
+                    LinearGradient(
+                        colors: [.gray.opacity(0.2), .gray.opacity(0.1)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
                     )
-                    .foregroundColor(.white)
-                    .cornerRadius(20)
-                    .modifier(NeonGradient(color: message.isUser ? .blue : .purple))
-                
-                if !message.isUser {
-                    Spacer()
-                }
+                )
+                .foregroundColor(.white)
+                .cornerRadius(20)
+                .modifier(NeonGradient(color: message.isUser ? .blue : .purple))
+            
+            if !message.isUser {
+                Spacer()
             }
         }
     }
@@ -523,7 +286,23 @@ extension URL {
     }
 }
 
+struct ChatHistory {
+    static let key = "chatHistory"
+    static func save(_ messages: [Message]) {
+        if let data = try? JSONEncoder().encode(messages) {
+            UserDefaults.standard.set(data, forKey: key)
+        }
+    }
+    static func load() -> [Message]? {
+        guard let data = UserDefaults.standard.data(forKey: key),
+              let messages = try? JSONDecoder().decode([Message].self, from: data) else {
+            return nil
+        }
+        return messages
+    }
+}
+
 #Preview {
     ContentView()
-        .modelContainer(for: [Message.self, FileAttachment.self], inMemory: true)
 }
+

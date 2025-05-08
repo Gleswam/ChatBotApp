@@ -14,23 +14,19 @@ class DeepSeekService {
         print("DeepSeekService initialized with API key: \(String(apiKey.prefix(8)))...")
     }
     
-    func sendMessage(_ message: String, attachments: [FileAttachment]? = nil) async throws -> String {
+    func sendMessage(_ message: String) async throws -> String {
         guard !message.isEmpty else {
             throw DeepSeekError.invalidRequest
         }
-        
         print("Sending message: \(message)")
-        
         guard let url = URL(string: baseURL) else {
             print("Error: Invalid URL")
             throw DeepSeekError.invalidURL
         }
-        
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
         var requestBody: [String: Any] = [
             "model": "deepseek-chat",
             "messages": [
@@ -38,86 +34,28 @@ class DeepSeekService {
             ],
             "temperature": 0.7
         ]
-        
-        // Add file attachments if present
-        if let attachments = attachments {
-            var fileContents: [[String: Any]] = []
-            for attachment in attachments {
-                let base64Data = attachment.fileData.base64EncodedString()
-                fileContents.append([
-                    "name": attachment.fileName,
-                    "type": attachment.mimeType,
-                    "content": base64Data
-                ])
-            }
-            requestBody["files"] = fileContents
+        // Пример: если бы были вложения, их обработка была бы здесь
+        // Сейчас attachments не используются
+        request.httpBody = try? JSONSerialization.data(withJSONObject: requestBody)
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw DeepSeekError.invalidResponse
         }
-        
-        do {
-            request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
-            print("Request body created successfully")
-        } catch {
-            print("Error creating request body: \(error)")
-            throw DeepSeekError.invalidRequest
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let choices = json["choices"] as? [[String: Any]],
+              let first = choices.first,
+              let messageDict = first["message"] as? [String: Any],
+              let content = messageDict["content"] as? String else {
+            throw DeepSeekError.invalidResponse
         }
-        
-        do {
-            print("Sending request to DeepSeek API...")
-            let (data, response) = try await session.data(for: request)
-            
-            guard let httpResponse = response as? HTTPURLResponse else {
-                print("Error: Invalid HTTP response")
-                throw DeepSeekError.invalidResponse
-            }
-            
-            print("Received response with status code: \(httpResponse.statusCode)")
-            
-            guard (200...299).contains(httpResponse.statusCode) else {
-                if let errorResponse = try? JSONDecoder().decode(DeepSeekErrorResponse.self, from: data) {
-                    print("API Error: \(errorResponse.error.message)")
-                    throw DeepSeekError.apiError(errorResponse.error.message)
-                }
-                print("Server Error: \(httpResponse.statusCode)")
-                throw DeepSeekError.serverError(httpResponse.statusCode)
-            }
-            
-            let chatResponse = try JSONDecoder().decode(DeepSeekResponse.self, from: data)
-            print("Successfully decoded response")
-            return chatResponse.choices.first?.message.content ?? "No response"
-        } catch let error as DeepSeekError {
-            print("DeepSeek Error: \(error)")
-            throw error
-        } catch {
-            print("Network Error: \(error)")
-            throw DeepSeekError.networkError(error)
-        }
+        return content
     }
 }
 
-enum DeepSeekError: Error, LocalizedError {
-    case invalidURL
+enum DeepSeekError: Error {
     case invalidRequest
+    case invalidURL
     case invalidResponse
-    case serverError(Int)
-    case apiError(String)
-    case networkError(Error)
-    
-    var errorDescription: String? {
-        switch self {
-        case .invalidURL:
-            return "Invalid URL configuration"
-        case .invalidRequest:
-            return "Invalid request format"
-        case .invalidResponse:
-            return "Invalid response from server"
-        case .serverError(let code):
-            return "Server error: \(code)"
-        case .apiError(let message):
-            return "API error: \(message)"
-        case .networkError(let error):
-            return "Network error: \(error.localizedDescription)"
-        }
-    }
 }
 
 struct DeepSeekResponse: Codable {
