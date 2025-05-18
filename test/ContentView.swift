@@ -9,6 +9,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 import PhotosUI
 import UIKit
+import UserNotifications
 
 struct NeonGradient: ViewModifier {
     let color: Color
@@ -47,7 +48,27 @@ struct PulsingAnimation: ViewModifier {
     }
 }
 
+struct LoadingDots: View {
+    @State private var phase: Int = 0
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(0..<3) { i in
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 8, height: 8)
+                    .opacity(phase == i ? 1 : 0.3)
+            }
+        }
+        .onAppear {
+            Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { _ in
+                phase = (phase + 1) % 3
+            }
+        }
+    }
+}
+
 struct ContentView: View {
+    @AppStorage("pendingQuickCommand") private var pendingQuickCommand: String = ""
     @State private var messages: [Message] = []
     @State private var newMessage: String = ""
     @State private var isLoading: Bool = false
@@ -55,6 +76,7 @@ struct ContentView: View {
     @State private var showSettings: Bool = false
     @State private var showError: Bool = false
     @State private var isProcessing: Bool = false
+    @Environment(\.colorScheme) var colorScheme
     
     private let deepSeekService: DeepSeekService
     
@@ -68,11 +90,11 @@ struct ContentView: View {
     
     var body: some View {
         ZStack {
-            // Background gradient
+            // Красивый градиентный фон
             LinearGradient(
-                colors: [Color.black, Color(red: 0.1, green: 0.1, blue: 0.2)],
-                startPoint: .top,
-                endPoint: .bottom
+                colors: colorScheme == .dark ? [Color.black, Color.purple.opacity(0.7)] : [Color.white, Color.blue.opacity(0.2)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
             )
             .ignoresSafeArea()
             
@@ -82,27 +104,51 @@ struct ContentView: View {
                     Text("AI Chat")
                         .font(.title)
                         .fontWeight(.bold)
-                        .foregroundColor(.white)
+                        .foregroundColor(colorScheme == .dark ? .white : .black)
                     
                     Spacer()
                     
                     Button(action: { showSettings = true }) {
                         Image(systemName: "gear")
                             .font(.title2)
-                            .foregroundColor(.white)
+                            .foregroundColor(colorScheme == .dark ? .white : .black)
                     }
                 }
                 .padding()
-                .background(Color.black.opacity(0.3))
+                .background(Color.clear)
                 
                 // Messages
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 12) {
-                        ForEach(messages) { message in
-                            MessageBubble(message: message)
+                ScrollViewReader { scrollProxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 12) {
+                            ForEach(messages) { message in
+                                MessageBubble(
+                                    message: message,
+                                    onDelete: message.isUser ? deleteMessage : nil
+                                )
+                                .id(message.id)
+                                .transition(.move(edge: message.isUser ? .trailing : .leading).combined(with: .opacity))
+                                .animation(.spring(), value: messages)
+                            }
+                            if isProcessing {
+                                HStack {
+                                    Spacer()
+                                    LoadingDots()
+                                        .accessibilityLabel("Loading response")
+                                    Spacer()
+                                }
+                                .padding(.vertical, 8)
+                            }
+                        }
+                        .padding()
+                    }
+                    .onChange(of: messages) { _ in
+                        withAnimation {
+                            if let last = messages.last {
+                                scrollProxy.scrollTo(last.id, anchor: .bottom)
+                            }
                         }
                     }
-                    .padding()
                 }
                 
                 if let error = errorMessage {
@@ -114,14 +160,13 @@ struct ContentView: View {
                 
                 // Input area
                 VStack(spacing: 0) {
-                    // Message input
                     HStack {
-                        TextField("Type a message...", text: $newMessage)
+                        TextField("Например: 'Погода сейчас', 'Новости', 'Скажи привет на японском'...", text: $newMessage)
                             .textFieldStyle(RoundedBorderTextFieldStyle())
                             .padding(10)
-                            .background(Color.white)
+                            .background(colorScheme == .dark ? Color(.secondarySystemBackground) : Color.white)
                             .cornerRadius(20)
-                            .foregroundColor(.black)
+                            .foregroundColor(colorScheme == .dark ? .white : .black)
                             .disabled(isProcessing)
                             .onSubmit {
                                 if !newMessage.isEmpty && !isProcessing {
@@ -131,8 +176,7 @@ struct ContentView: View {
                         
                         Button(action: sendMessage) {
                             if isProcessing {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                LoadingDots()
                             } else {
                                 Image(systemName: "paperplane.fill")
                                     .font(.title2)
@@ -152,7 +196,22 @@ struct ContentView: View {
                     }
                     .padding()
                 }
-                .background(Color.black.opacity(0.3))
+                .background(Color.clear)
+            }
+        }
+        .onChange(of: messages) { _ in
+            ChatHistory.save(messages)
+        }
+        .onAppear {
+            if !pendingQuickCommand.isEmpty {
+                handleQuickCommand(pendingQuickCommand)
+                pendingQuickCommand = ""
+            }
+        }
+        .onChange(of: pendingQuickCommand) { newValue in
+            if !newValue.isEmpty {
+                handleQuickCommand(newValue)
+                pendingQuickCommand = ""
             }
         }
         .sheet(isPresented: $showSettings) {
@@ -164,9 +223,9 @@ struct ContentView: View {
         } message: {
             Text(errorMessage ?? "")
         }
-        .onChange(of: messages) { _ in
-            ChatHistory.save(messages)
-        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Chat screen")
+        .accessibilityHint("Swipe messages left or right for actions, double tap to copy")
     }
     
     private func sendMessage() {
@@ -174,19 +233,26 @@ struct ContentView: View {
         guard !trimmedMessage.isEmpty else { return }
         
         let userMessage = Message(content: trimmedMessage, isUser: true, timestamp: Date())
-        messages.append(userMessage)
+        withAnimation {
+            messages.append(userMessage)
+        }
         Message.saveLastMessage(userMessage)
         newMessage = ""
         
         isProcessing = true
+        UIImpactFeedbackGenerator(style: .light).impactOccurred() // Виброотклик
         Task {
             do {
                 let response = try await deepSeekService.sendMessage(trimmedMessage)
                 await MainActor.run {
                     let aiMessage = Message(content: response, isUser: false, timestamp: Date())
-                    messages.append(aiMessage)
+                    withAnimation {
+                        messages.append(aiMessage)
+                    }
                     Message.saveLastMessage(aiMessage)
                     isProcessing = false
+                    sendLocalNotification(with: response)
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred() // Виброотклик
                 }
             } catch {
                 await MainActor.run {
@@ -202,38 +268,51 @@ struct ContentView: View {
         messages.removeAll()
         showSettings = false
     }
-}
-
-struct MessageBubble: View {
-    let message: Message
     
-    var body: some View {
-        HStack {
-            if message.isUser {
-                Spacer()
+    private func handleQuickCommand(_ command: String) {
+        isProcessing = true
+        Task {
+            do {
+                let response = try await deepSeekService.sendMessage(command)
+                await MainActor.run {
+                    let aiMessage = Message(content: response, isUser: false, timestamp: Date())
+                    withAnimation {
+                        messages.append(aiMessage)
+                    }
+                    Message.saveLastMessage(aiMessage)
+                    isProcessing = false
+                    sendLocalNotification(with: response)
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred() // Виброотклик
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                    showError = true
+                    isProcessing = false
+                }
             }
-            
-            Text(message.content)
-                .padding()
-                .background(
-                    message.isUser ?
-                    LinearGradient(
-                        colors: [.blue.opacity(0.3), .purple.opacity(0.3)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ) :
-                    LinearGradient(
-                        colors: [.gray.opacity(0.2), .gray.opacity(0.1)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .foregroundColor(.white)
-                .cornerRadius(20)
-                .modifier(NeonGradient(color: message.isUser ? .blue : .purple))
-            
-            if !message.isUser {
-                Spacer()
+        }
+    }
+    
+    private func sendLocalNotification(with text: String) {
+        let content = UNMutableNotificationContent()
+        content.title = "AI Chat"
+        content.body = text
+        content.sound = .default
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                print("Notification error: \(error)")
+            }
+        }
+    }
+    
+    private func deleteMessage(_ message: Message) {
+        withAnimation {
+            if let index = messages.firstIndex(where: { $0.id == message.id }) {
+                messages.remove(at: index)
+                ChatHistory.save(messages)
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
             }
         }
     }
