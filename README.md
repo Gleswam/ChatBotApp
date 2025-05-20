@@ -104,13 +104,6 @@ For major changes, please open an issue first to discuss what you would like to 
 
 ---
 
-## 📬 Feedback
-
-Have ideas or found a bug?  
-Open an issue or email [your@email.com](mailto:your@email.com).
-
----
-
 ## 📄 License
 
 This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
