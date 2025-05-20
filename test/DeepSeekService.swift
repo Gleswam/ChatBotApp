@@ -34,8 +34,46 @@ class DeepSeekService {
             ],
             "temperature": 0.7
         ]
-        // Пример: если бы были вложения, их обработка была бы здесь
-        // Сейчас attachments не используются
+        // Example: if there were attachments, they would be handled here
+        // Attachments are not used currently
+        request.httpBody = try? JSONSerialization.data(withJSONObject: requestBody)
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw DeepSeekError.invalidResponse
+        }
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let choices = json["choices"] as? [[String: Any]],
+              let first = choices.first,
+              let messageDict = first["message"] as? [String: Any],
+              let content = messageDict["content"] as? String else {
+            throw DeepSeekError.invalidResponse
+        }
+        return content
+    }
+    
+    func sendMessages(_ messages: [Message]) async throws -> String {
+        let lastMessages = messages.suffix(5)
+        let formattedMessages = lastMessages.map { msg in
+            [
+                "role": msg.isUser ? "user" : "assistant",
+                "content": msg.content
+            ]
+        }
+        guard !formattedMessages.isEmpty else {
+            throw DeepSeekError.invalidRequest
+        }
+        guard let url = URL(string: baseURL) else {
+            throw DeepSeekError.invalidURL
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let requestBody: [String: Any] = [
+            "model": "deepseek-chat",
+            "messages": formattedMessages,
+            "temperature": 0.7
+        ]
         request.httpBody = try? JSONSerialization.data(withJSONObject: requestBody)
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {

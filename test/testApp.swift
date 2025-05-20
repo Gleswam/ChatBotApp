@@ -1,10 +1,3 @@
-//
-//  testApp.swift
-//  test
-//
-//  Created by Gleswam on 6. 4. 2025..
-//
-
 import SwiftUI
 
 @main

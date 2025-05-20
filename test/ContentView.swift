@@ -1,15 +1,7 @@
-//
-//  ContentView.swift
-//  test
-//
-//  Created by Gleswam on 6. 4. 2025..
-//
-
 import SwiftUI
 import UniformTypeIdentifiers
 import PhotosUI
 import UIKit
-import UserNotifications
 
 struct NeonGradient: ViewModifier {
     let color: Color
@@ -82,7 +74,7 @@ struct ContentView: View {
     
     init() {
         self.deepSeekService = DeepSeekService(apiKey: Config.apiKey)
-        // Загрузка истории чата при инициализации
+        // Load chat history on initialization
         if let loaded = ChatHistory.load() {
             _messages = State(initialValue: loaded)
         }
@@ -90,7 +82,7 @@ struct ContentView: View {
     
     var body: some View {
         ZStack {
-            // Красивый градиентный фон
+            // Beautiful gradient background
             LinearGradient(
                 colors: colorScheme == .dark ? [Color.black, Color.purple.opacity(0.7)] : [Color.white, Color.blue.opacity(0.2)],
                 startPoint: .topLeading,
@@ -101,7 +93,7 @@ struct ContentView: View {
             VStack {
                 // Header
                 HStack {
-                    Text("AI Chat")
+                    Text("Bubly Chat")
                         .font(.title)
                         .fontWeight(.bold)
                         .foregroundColor(colorScheme == .dark ? .white : .black)
@@ -161,7 +153,7 @@ struct ContentView: View {
                 // Input area
                 VStack(spacing: 0) {
                     HStack {
-                        TextField("Например: 'Погода сейчас', 'Новости', 'Скажи привет на японском'...", text: $newMessage)
+                        TextField("", text: $newMessage)
                             .textFieldStyle(RoundedBorderTextFieldStyle())
                             .padding(10)
                             .background(colorScheme == .dark ? Color(.secondarySystemBackground) : Color.white)
@@ -240,10 +232,10 @@ struct ContentView: View {
         newMessage = ""
         
         isProcessing = true
-        UIImpactFeedbackGenerator(style: .light).impactOccurred() // Виброотклик
+        UIImpactFeedbackGenerator(style: .light).impactOccurred() // Haptic feedback
         Task {
             do {
-                let response = try await deepSeekService.sendMessage(trimmedMessage)
+                let response = try await deepSeekService.sendMessages(messages)
                 await MainActor.run {
                     let aiMessage = Message(content: response, isUser: false, timestamp: Date())
                     withAnimation {
@@ -251,8 +243,7 @@ struct ContentView: View {
                     }
                     Message.saveLastMessage(aiMessage)
                     isProcessing = false
-                    sendLocalNotification(with: response)
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred() // Виброотклик
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred() // Haptic feedback
                 }
             } catch {
                 await MainActor.run {
@@ -273,7 +264,12 @@ struct ContentView: View {
         isProcessing = true
         Task {
             do {
-                let response = try await deepSeekService.sendMessage(command)
+                // Add the command as a new user message
+                let quickMessage = Message(content: command, isUser: true, timestamp: Date())
+                withAnimation {
+                    messages.append(quickMessage)
+                }
+                let response = try await deepSeekService.sendMessages(messages)
                 await MainActor.run {
                     let aiMessage = Message(content: response, isUser: false, timestamp: Date())
                     withAnimation {
@@ -281,8 +277,7 @@ struct ContentView: View {
                     }
                     Message.saveLastMessage(aiMessage)
                     isProcessing = false
-                    sendLocalNotification(with: response)
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred() // Виброотклик
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred() // Haptic feedback
                 }
             } catch {
                 await MainActor.run {
@@ -290,19 +285,6 @@ struct ContentView: View {
                     showError = true
                     isProcessing = false
                 }
-            }
-        }
-    }
-    
-    private func sendLocalNotification(with text: String) {
-        let content = UNMutableNotificationContent()
-        content.title = "AI Chat"
-        content.body = text
-        content.sound = .default
-        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error = error {
-                print("Notification error: \(error)")
             }
         }
     }

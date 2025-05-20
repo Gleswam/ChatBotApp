@@ -16,7 +16,7 @@ struct MessageBubble: View {
                 Spacer()
             }
             
-            // Основной контейнер сообщения
+            // Main message container
             Text(message.content)
                 .padding()
                 .background(
@@ -36,7 +36,7 @@ struct MessageBubble: View {
                 .cornerRadius(20)
                 .modifier(NeonGradient(color: message.isUser ? .blue : .purple))
                 .shadow(radius: 4)
-                // Добавляем контекстное меню при долгом нажатии
+                // Add context menu on long press
                 .contextMenu {
                     Button(action: copyMessage) {
                         Label("Copy", systemImage: "doc.on.doc")
@@ -50,7 +50,7 @@ struct MessageBubble: View {
                         }
                     }
                 }
-                // Добавляем поддержку VoiceOver
+                // Add VoiceOver support
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(message.isUser ? "Your message" : "AI response")
                 .accessibilityHint("Long press for more options")
