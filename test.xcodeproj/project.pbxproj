@@ -6,6 +6,12 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		1CEB029E2DDCC01100557439 /* chat_main.png in Resources */ = {isa = PBXBuildFile; fileRef = 1CEB029A2DDCC01100557439 /* chat_main.png */; };
+		1CEB029F2DDCC01100557439 /* chat_response.png in Resources */ = {isa = PBXBuildFile; fileRef = 1CEB029B2DDCC01100557439 /* chat_response.png */; };
+		1CEB02A02DDCC01100557439 /* chat_settings.png in Resources */ = {isa = PBXBuildFile; fileRef = 1CEB029C2DDCC01100557439 /* chat_settings.png */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXCopyFilesBuildPhase section */
 		1CE981EC2DCC84A400C56CB5 /* Embed Foundation Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
@@ -20,8 +26,11 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		1C43A3572DA2CBB500F6269E /* test.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = test.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1C43A3572DA2CBB500F6269E /* test.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = test.app; path = "/Users/gleswam/Desktop/testappp/test/build/Debug-iphoneos/test.app"; sourceTree = "<absolute>"; };
 		1CE981D52DCC84A300C56CB5 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		1CEB029A2DDCC01100557439 /* chat_main.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = chat_main.png; sourceTree = "<group>"; };
+		1CEB029B2DDCC01100557439 /* chat_response.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = chat_response.png; sourceTree = "<group>"; };
+		1CEB029C2DDCC01100557439 /* chat_settings.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = chat_settings.png; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -48,16 +57,8 @@
 			children = (
 				1C43A3592DA2CBB500F6269E /* test */,
 				1CE981D22DCC84A300C56CB5 /* Frameworks */,
-				1C43A3582DA2CBB500F6269E /* Products */,
+				1CEB029D2DDCC01100557439 /* screenshots */,
 			);
-			sourceTree = "<group>";
-		};
-		1C43A3582DA2CBB500F6269E /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				1C43A3572DA2CBB500F6269E /* test.app */,
-			);
-			name = Products;
 			sourceTree = "<group>";
 		};
 		1CE981D22DCC84A300C56CB5 /* Frameworks */ = {
@@ -66,6 +67,16 @@
 				1CE981D52DCC84A300C56CB5 /* SwiftUI.framework */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		1CEB029D2DDCC01100557439 /* screenshots */ = {
+			isa = PBXGroup;
+			children = (
+				1CEB029A2DDCC01100557439 /* chat_main.png */,
+				1CEB029B2DDCC01100557439 /* chat_response.png */,
+				1CEB029C2DDCC01100557439 /* chat_settings.png */,
+			);
+			path = screenshots;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -119,7 +130,7 @@
 			mainGroup = 1C43A34E2DA2CBB500F6269E;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
-			productRefGroup = 1C43A3582DA2CBB500F6269E /* Products */;
+			productRefGroup = 1C43A34E2DA2CBB500F6269E;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -133,6 +144,9 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1CEB029E2DDCC01100557439 /* chat_main.png in Resources */,
+				1CEB029F2DDCC01100557439 /* chat_response.png in Resources */,
+				1CEB02A02DDCC01100557439 /* chat_settings.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
